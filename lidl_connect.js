@@ -2,16 +2,17 @@ username = '015221234567'
 password = 'supergeheim'
 apiUrl = 'https://api.lidl-connect.de/api'
 
-fresh = 0
+fresh = false
+tariffBooked = false
 fm = FileManager.local()
 path = fm.joinPath(fm.documentsDirectory(), "lidl_connect.json")
 
-let widget = await createWidget()
+let lidlConnectWidget = await createWidget()
 if (!config.runsInWidget) {
-  await widget.presentSmall()
+  await lidlConnectWidget.presentSmall()
 }
 
-Script.setWidget(widget)
+Script.setWidget(lidlConnectWidget)
 Script.complete()
 
 
@@ -41,7 +42,7 @@ async function getToken() {
 
 
 // request data from server
-async function getData() {
+async function getConsumptions() {
   let token = await getToken()
   let req = new Request(apiUrl + '/graphql')
   req.method = 'POST';
@@ -59,9 +60,13 @@ async function getData() {
 
   try {
     data = await req.loadJSON()
-    fm.writeString(path, JSON.stringify(data, null, 2))
-    fresh = 1
-    extractUsage(data)
+    if (data['data']['consumptions']['consumptionsForUnit'].length > 0) {
+      extractConsumptions(data)
+      tariffBooked = true
+    } else {
+      tariffBooked = false
+    }
+    fresh = true
   } catch (e) {
     data = JSON.parse(fm.readString(path), null)
     if (!data) {
@@ -72,7 +77,7 @@ async function getData() {
 
 
 // extract data from response json
-async function extractUsage(data) {
+async function extractConsumptions(data) {
   let response = {}
   response['consumed'] = data['data']['consumptions']['consumptionsForUnit'][0]['consumed']
   response['max'] = data['data']['consumptions']['consumptionsForUnit'][0]['max']
@@ -87,21 +92,27 @@ async function extractUsage(data) {
 
 
 async function createWidget() {
-  await getData()
+  await getConsumptions()
   data = JSON.parse(fm.readString(path), null)
   const widget = new ListWidget()
 
-  if (!data || !data['consumed']) {
-    widget.addText("Initial execution requires internet connection.")
-  } else {
-    widget.addSpacer(16)
-    try {
-      const line1 = widget.addText('LIDL Connect')
-      line1.font = Font.mediumSystemFont(12)
 
+  if (!data) {
+    line1 = widget.addText("Für die initiale Ausführung wird eine Internetverbindung benötigt.")
+    line1.font = Font.mediumSystemFont(16)
+  } else if (fresh && !tariffBooked) {
+    line1 = widget.addText("Aktuell ist kein Datentarif gebucht.")
+    line1.font = Font.mediumSystemFont(16)
+  } else {
+    try {
+      widget.addSpacer(7)
+      const line1 = widget.addText('LIDL Connect')
+      line1.font = Font.boldSystemFont(14)
+
+      widget.addSpacer(3)
       let usedPercentage = data['percentage']
       const line2 = widget.addText(usedPercentage.toString() + '%')
-      line2.font = Font.boldSystemFont(36)
+      line2.font = Font.boldSystemFont(40)
       line2.textColor = Color.green()
       if (usedPercentage >= 75) {
         line2.textColor = Color.orange()
@@ -109,29 +120,36 @@ async function createWidget() {
         line2.textColor = Color.red()
       }
 
-      const line3 = widget.addText(data['consumed'].toString() + ' / ' + data['max'].toString() + ' ' + data['unit'])
-      line3.font = Font.mediumSystemFont(12)
-      widget.addSpacer(16)
+      widget.addSpacer(3)
+      const line3 = widget.addText(data['consumed'].toString() + ' ' + data['unit'] + ' / ' + data['max'].toString() + ' ' + data['unit'])
+      line3.font = Font.boldSystemFont(12)
 
       // add remaining time
-      let line4, line5
-      line4 = widget.addText('remaining time:')
+      widget.addSpacer(8)
+      let line4
+      let timeRemainingString = ''
+      if (data['daysRemaining'] > 1) {
+        timeRemainingString = (data['daysRemaining'] + 1).toString() + ' Tage übrig'
+      } else {
+        if (data['daysRemaining'] == 1) {
+          timeRemainingString = '1 Tag & '
+        }
+        if (data['hoursRemaining'] == 1) {
+          timeRemainingString += '1 Stunde übrig'
+        } else {
+          timeRemainingString += data['hoursRemaining'].toString() + ' Stunden übrig'
+        }
+      }
+      line4 = widget.addText(timeRemainingString)
       line4.font = Font.mediumSystemFont(12)
 
-      if (data['daysRemaining'] > 2) {
-        line5 = widget.addText((data['daysRemaining'] + 1).toString() + ' days')
-      } else {
-        line5 = widget.addText(data['daysRemaining'].toString() + ' days and ' + data['hoursRemaining'].toString() + ' hours')
-      }
-      line5.font = Font.mediumSystemFont(12)
-
       // gray out old data if request failed
-      if (fresh == 0) {
+      if (!fresh) {
         line1.textColor = Color.darkGray()
         line2.textColor = Color.darkGray()
         line3.textColor = Color.darkGray()
         line4.textColor = Color.darkGray()
-        line5.textColor = Color.darkGray()
+
       }
 
     } catch (err) {
@@ -141,7 +159,7 @@ async function createWidget() {
   }
 
   // add time of last refresh
-  widget.addSpacer(4)
+  widget.addSpacer(8)
   let now = new Date();
   let timeLabel = widget.addDate(now)
   timeLabel.font = Font.mediumSystemFont(10)
