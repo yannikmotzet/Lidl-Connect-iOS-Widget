@@ -3,7 +3,6 @@ password = 'supergeheim'
 apiUrl = 'https://api.lidl-connect.de/api'
 
 fresh = false
-tariffBooked = false
 fm = FileManager.local()
 path = fm.joinPath(fm.documentsDirectory(), "lidl_connect.json")
 
@@ -62,9 +61,10 @@ async function getConsumptions() {
     data = await req.loadJSON()
     if (data['data']['consumptions']['consumptionsForUnit'].length > 0) {
       extractConsumptions(data)
-      tariffBooked = true
     } else {
-      tariffBooked = false
+      let consumption
+      consumption['booked'] = false
+      fm.writeString(path, JSON.stringify(consumption, null, 2))
     }
     fresh = true
   } catch (e) {
@@ -76,18 +76,19 @@ async function getConsumptions() {
 }
 
 
-// extract data from response json
+// extract consumption from response json
 async function extractConsumptions(data) {
-  let response = {}
-  response['consumed'] = data['data']['consumptions']['consumptionsForUnit'][0]['consumed']
-  response['max'] = data['data']['consumptions']['consumptionsForUnit'][0]['max']
-  response['percentage'] = Math.round(response['consumed'] / response['max'] * 100)
-  response['unit'] = data['data']['consumptions']['consumptionsForUnit'][0]['unit']
-  response['expirationDate'] = Date.parse(data['data']['consumptions']['consumptionsForUnit'][0]['expirationDate'])
-  let timeDiff = response['expirationDate'] - Date.parse(new Date())
-  response['daysRemaining'] = Math.floor(timeDiff / (1000 * 60 * 60 * 24))
-  response['hoursRemaining'] = Math.floor((timeDiff / (1000 * 60 * 60)) % 24)
-  fm.writeString(path, JSON.stringify(response, null, 2))
+  let consumption = {}
+  consumption['booked'] = true
+  consumption['consumed'] = data['data']['consumptions']['consumptionsForUnit'][0]['consumed']
+  consumption['max'] = data['data']['consumptions']['consumptionsForUnit'][0]['max']
+  consumption['percentage'] = Math.round(consumption['consumed'] / consumption['max'] * 100)
+  consumption['unit'] = data['data']['consumptions']['consumptionsForUnit'][0]['unit']
+  consumption['expirationDate'] = Date.parse(data['data']['consumptions']['consumptionsForUnit'][0]['expirationDate'])
+  let timeDiff = consumption['expirationDate'] - Date.parse(new Date())
+  consumption['daysRemaining'] = Math.floor(timeDiff / (1000 * 60 * 60 * 24))
+  consumption['hoursRemaining'] = Math.floor((timeDiff / (1000 * 60 * 60)) % 24)
+  fm.writeString(path, JSON.stringify(consumption, null, 2))
 }
 
 
@@ -96,11 +97,12 @@ async function createWidget() {
   data = JSON.parse(fm.readString(path), null)
   const widget = new ListWidget()
 
+  let greyColor = Color.dynamic(Color.darkGray(), Color.lightGray())
 
   if (!data) {
     line1 = widget.addText("Für die initiale Ausführung wird eine Internetverbindung benötigt.")
     line1.font = Font.mediumSystemFont(16)
-  } else if (fresh && !tariffBooked) {
+  } else if (!data['booked']) {
     line1 = widget.addText("Aktuell ist kein Datentarif gebucht.")
     line1.font = Font.mediumSystemFont(16)
   } else {
@@ -145,11 +147,10 @@ async function createWidget() {
 
       // gray out old data if request failed
       if (!fresh) {
-        line1.textColor = Color.darkGray()
-        line2.textColor = Color.darkGray()
-        line3.textColor = Color.darkGray()
-        line4.textColor = Color.darkGray()
-
+        line1.textColor = greyColor
+        line2.textColor = greyColor
+        line3.textColor = greyColor
+        line4.textColor = greyColor
       }
 
     } catch (err) {
@@ -165,7 +166,7 @@ async function createWidget() {
   timeLabel.font = Font.mediumSystemFont(10)
   timeLabel.centerAlignText()
   timeLabel.applyTimeStyle()
-  timeLabel.textColor = Color.darkGray()
+  timeLabel.textColor = greyColor
 
   return widget
 }
