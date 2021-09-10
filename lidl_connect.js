@@ -96,7 +96,6 @@ async function createWidget() {
   await getConsumptions()
   data = JSON.parse(fm.readString(path), null)
   const widget = new ListWidget()
-
   let greyColor = Color.dynamic(Color.darkGray(), Color.lightGray())
 
   if (!data) {
