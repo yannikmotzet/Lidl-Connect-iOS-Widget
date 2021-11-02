@@ -84,8 +84,9 @@ async function extractConsumptions(data) {
   consumption['max'] = data['data']['consumptions']['consumptionsForUnit'][0]['max']
   consumption['percentage'] = Math.round(consumption['consumed'] / consumption['max'] * 100)
   consumption['unit'] = data['data']['consumptions']['consumptionsForUnit'][0]['unit']
-  consumption['expirationDate'] = Date.parse(data['data']['consumptions']['consumptionsForUnit'][0]['expirationDate'])
-  let timeDiff = consumption['expirationDate'] - Date.parse(new Date())
+  consumption['expirationDate'] = data['data']['consumptions']['consumptionsForUnit'][0]['expirationDate']
+  // add 24 hours of last day
+  let timeDiff = Date.parse(consumption['expirationDate']) + (1000*60*60*24) - Date.parse(new Date())
   consumption['daysRemaining'] = Math.floor(timeDiff / (1000 * 60 * 60 * 24))
   consumption['hoursRemaining'] = Math.floor((timeDiff / (1000 * 60 * 60)) % 24)
   fm.writeString(path, JSON.stringify(consumption, null, 2))
