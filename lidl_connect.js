@@ -62,8 +62,7 @@ async function getConsumptions() {
     if (data['data']['consumptions']['consumptionsForUnit'].length > 0) {
       extractConsumptions(data)
     } else {
-      let consumption
-      consumption['booked'] = false
+      let consumption = {"booked": false}
       fm.writeString(path, JSON.stringify(consumption, null, 2))
     }
     fresh = true
